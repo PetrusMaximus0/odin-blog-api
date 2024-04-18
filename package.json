@@ -1,0 +1,29 @@
+{
+	"name": "odin-blog-api",
+	"version": "0.0.0",
+	"private": true,
+	"scripts": {
+		"start": "node ./bin/www",
+		"devstart": "nodemon --env-file=.env ./bin/www",
+		"serverstart": "npm run devstart && DEBUG=odin-blog-api:*"
+	},
+	"dependencies": {
+		"bcryptjs": "^2.4.3",
+		"compression": "^1.7.4",
+		"connect-mongo": "^5.1.0",
+		"debug": "~2.6.9",
+		"express": "^4.19.2",
+		"express-async-handler": "^1.2.0",
+		"express-rate-limit": "^7.2.0",
+		"express-validator": "^7.0.1",
+		"helmet": "^7.1.0",
+		"luxon": "^3.4.4",
+		"mongoose": "^8.3.2",
+		"morgan": "~1.9.1",
+		"passport": "^0.7.0",
+		"passport-local": "^1.0.0"
+	},
+	"devDependencies": {
+		"nodemon": "^3.1.0"
+	}
+}
