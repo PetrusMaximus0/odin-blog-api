@@ -1,6 +1,8 @@
 const jwt = require('jsonwebtoken');
 const Post = require('../models/post');
+const Comment = require('../models/comment');
 const asyncHandler = require('express-async-handler');
+const { body, validationResult } = require('express-validator');
 
 // Verify if the local token is valid.
 verifyToken = (req, res, next) => {
@@ -54,7 +56,9 @@ exports.new_blogpost_POST = [
 
 exports.read_blogpost_GET = asyncHandler(async (req, res, next) => {
 	//
-	const blogPost = await Post.findById(req.params.postid).exec();
+	const blogPost = await Post.findById(req.params.postid)
+		.populate('comments')
+		.exec();
 
 	//
 	if (blogPost === null || blogPost.hidden === true) {
@@ -73,3 +77,44 @@ exports.read_blogpost_GET = asyncHandler(async (req, res, next) => {
 exports.delete_blogpost_DELETE = (req, res, next) => {
 	res.send(`Delete post with id: ${req.params.postid}`);
 };
+
+exports.new_comment_POST = [
+	// Validate and sanitize the comment
+	body('author').trim().escape(),
+	body('text').trim().isLength({ min: 1, max: 300 }).escape(),
+
+	asyncHandler(async (req, res, next) => {
+		// Verify the blogpost ID is valid
+		const blogPost = await Post.findById(req.params.postid).exec();
+
+		if (blogPost === null || blogPost.hidden === true) {
+			// Couldn't find the post or it is marked as hidden.
+			res.sendStatus(404);
+		}
+
+		// Extract the errors from the comment form
+		const errors = validationResult(req);
+
+		if (!errors.isEmpty()) {
+			// There are errors
+			// Send back the form with sanitized values and errors.
+			console.log('Errors in form validation', errors);
+			res.json({ errors: errors.array(), formData: req.body });
+		} else {
+			// The form data is valid
+			const newComment = Comment({
+				author: req.body.author !== '' ? req.body.author : 'Anonymous User',
+				text: req.body.text,
+				timeStamp: new Date(),
+			});
+			console.log(newComment);
+			await Promise.all([
+				newComment.save(),
+				Post.findByIdAndUpdate(req.params.postid, {
+					$push: { comments: newComment },
+				}),
+			]);
+			res.redirect(`/posts/${req.params.postid}`);
+		}
+	}),
+];
