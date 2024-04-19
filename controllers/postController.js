@@ -52,9 +52,23 @@ exports.new_blogpost_POST = [
 	},
 ];
 
-exports.read_blogpost_GET = (req, res, next) => {
-	res.send(`Read post with id: ${req.params.postid}`);
-};
+exports.read_blogpost_GET = asyncHandler(async (req, res, next) => {
+	//
+	const blogPost = await Post.findById(req.params.postid).exec();
+
+	//
+	if (blogPost === null || blogPost.hidden === true) {
+		// Couldn't find the post or it is marked as hidden.
+		res.sendStatus(404);
+		return;
+	}
+
+	// Post found and not hidden, return the payload
+	res.json({
+		blogPost: blogPost,
+		Message: 'Here is the blog post you requested!',
+	});
+});
 
 exports.delete_blogpost_DELETE = (req, res, next) => {
 	res.send(`Delete post with id: ${req.params.postid}`);
