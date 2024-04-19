@@ -1,20 +1,35 @@
-var express = require('express');
-var path = require('path');
-var cookieParser = require('cookie-parser');
-var logger = require('morgan');
+const express = require('express');
+const logger = require('morgan');
+//
+const indexRouter = require('./routes/index');
+const usersRouter = require('./routes/users');
+const postsRouter = require('./routes/posts');
+//
 
-var indexRouter = require('./routes/index');
-var usersRouter = require('./routes/users');
+//
+const mongoose = require('mongoose');
 
-var app = express();
+// Set up a mongo connection
+const main = async () => {
+	console.log('Attemping to connect to mongodb...');
+	await mongoose.connect(process.env.MONGODB_URI);
+	console.log('Connected.');
+};
+main().catch((err) => {
+	console.log('Connection error', err);
+	console.log('Retrying...');
+	main();
+});
 
+//
+const app = express();
 app.use(logger('dev'));
 app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
-app.use(cookieParser());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.urlencoded({ extended: true }));
 
+//
 app.use('/', indexRouter);
 app.use('/users', usersRouter);
+app.use('/posts', postsRouter);
 
 module.exports = app;
