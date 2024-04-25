@@ -45,13 +45,36 @@ exports.new_blogpost_GET = [
 
 exports.new_blogpost_POST = [
 	verifyToken,
-	(req, res, next) => {
+	body('title').trim().isLength({ min: 1, max: 100 }).escape(),
+	body('text').trim().isLength({ min: 1, max: 1000 }).escape(),
+	body('hidden').isBoolean(),
+	asyncHandler(async (req, res, next) => {
 		// Validate and sanitize fields
 		// Extract validation errors
-		// If errors then rerender blogpost form.
+		const errors = validationResult(req);
+		if (!errors.isEmpty()) {
+			// If errors then rerender blogpost form.
+			res.json({
+				postData: {
+					title: req.body.title,
+					text: req.body.text,
+					hidden: req.body.hidden,
+				},
+				errors: errors.array(),
+			});
+		}
 		// No errors then store the blog post in database and redirect to the blogpost list.
-		res.json({ authData: req.authData, message: 'Posted blogpost.' });
-	},
+		const newBlogPost = Post({
+			title: req.body.title,
+			text: req.body.text,
+			timeStamp: new Date(),
+			comments: [],
+			hidden: req.body.hidden,
+		});
+
+		await newBlogPost.save();
+		res.json({ authData: req.authData, post: newBlogPost });
+	}),
 ];
 
 exports.read_blogpost_GET = asyncHandler(async (req, res, next) => {
