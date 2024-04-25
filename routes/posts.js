@@ -18,6 +18,6 @@ router.get('/:postid', postController.read_blogpost_GET);
 router.post('/:postid/comment/new', postController.new_comment_POST);
 
 // DELETE Delete a post.
-router.delete('/:postid/delete', postController.delete_blogpost_DELETE);
+router.delete('/:postid', postController.delete_blogpost_DELETE);
 
 module.exports = router;

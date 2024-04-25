@@ -97,9 +97,24 @@ exports.read_blogpost_GET = asyncHandler(async (req, res, next) => {
 	});
 });
 
-exports.delete_blogpost_DELETE = (req, res, next) => {
-	res.send(`Delete post with id: ${req.params.postid}`);
-};
+exports.delete_blogpost_DELETE = [
+	verifyToken,
+	asyncHandler(async (req, res, next) => {
+		// This can be simplified by storing a reference in the comment to the parent blogpost.
+		// In that case we trade storage with one less request.
+		const blogpost = await Post.findById(req.params.postid).exec();
+		const allCommentsDeleted = await Comment.deleteMany({
+			_id: { $in: blogpost.comments },
+		}).exec();
+		const deletedBlogPost = await Post.findByIdAndDelete(
+			req.params.postid
+		).exec();
+		res.json({
+			deletedBlogPost: deletedBlogPost,
+			deleteCount: allCommentsDeleted,
+		});
+	}),
+];
 
 exports.new_comment_POST = [
 	// Validate and sanitize the comment
