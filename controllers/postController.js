@@ -3,6 +3,7 @@ const Post = require('../models/post');
 const Comment = require('../models/comment');
 const asyncHandler = require('express-async-handler');
 const { body, validationResult } = require('express-validator');
+const Category = require('../models/category');
 
 // Verify if the local token is valid.
 verifyToken = (req, res, next) => {
@@ -31,17 +32,28 @@ verifyToken = (req, res, next) => {
 
 exports.blogposts_GET = [
 	asyncHandler(async (req, res, next) => {
+		const numberOfCards = 3;
+		const pageNumber = req.query.page ? parseInt(req.query.page) - 1 : 0;
 		const allPosts = await Post.find({ hidden: false })
-			.sort({ timeStamp: -1 })
+			.sort({ date: -1 })
+			.skip(pageNumber * numberOfCards)
+			.limit(numberOfCards)
+			.populate('comments')
 			.exec();
 		res.json(allPosts);
 	}),
 ];
 
+exports.shortlist_GET = asyncHandler(async (req, res, next) => {
+	const categories = await Category.find({}).sort({ name: 1 }).exec();
+	const posts = await Post.find({ hidden: false }).exec();
+	res.json({ posts, categories });
+});
+
 exports.blogposts_admin_GET = [
 	verifyToken,
 	asyncHandler(async (req, res, next) => {
-		const allPosts = await Post.find({}).sort({ timeStamp: -1 }).exec();
+		const allPosts = await Post.find({}).sort({ date: -1 }).exec();
 		res.json(allPosts);
 	}),
 ];
@@ -57,6 +69,8 @@ exports.new_blogpost_POST = [
 	verifyToken,
 	body('title').trim().isLength({ min: 1, max: 100 }).escape(),
 	body('text').trim().isLength({ min: 1, max: 1000 }).escape(),
+	body('author').trim().isLength({ min: 1, max: 100 }).escape(),
+	body('timeToRead').trim().isLength({ min: 1, max: 3 }).escape(),
 	body('hidden').isBoolean(),
 	asyncHandler(async (req, res, next) => {
 		// Validate and sanitize fields
@@ -66,8 +80,10 @@ exports.new_blogpost_POST = [
 			// If errors then rerender blogpost form.
 			res.json({
 				postData: {
+					author: req.body.author,
 					title: req.body.title,
 					text: req.body.text,
+					timeToRead: req.body.timeToRead,
 					hidden: req.body.hidden,
 				},
 				errors: errors.array(),
@@ -75,9 +91,11 @@ exports.new_blogpost_POST = [
 		}
 		// No errors then store the blog post in database and redirect to the blogpost list.
 		const newBlogPost = Post({
+			author: req.body.author,
 			title: req.body.title,
 			text: req.body.text,
-			timeStamp: new Date(),
+			date: new Date(),
+			timeToRead: req.body.timeToRead,
 			comments: [],
 			hidden: req.body.hidden,
 		});
@@ -153,16 +171,22 @@ exports.new_comment_POST = [
 			const newComment = Comment({
 				author: req.body.author !== '' ? req.body.author : 'Anonymous User',
 				text: req.body.text,
-				timeStamp: new Date(),
+				date: new Date(),
 			});
 			console.log(newComment);
-			await Promise.all([
+			const [newCommentResp, newPost] = await Promise.all([
 				newComment.save(),
-				Post.findByIdAndUpdate(req.params.postid, {
-					$push: { comments: newComment },
-				}),
+				Post.findByIdAndUpdate(
+					req.params.postid,
+					{
+						$push: { comments: newComment },
+					},
+					{ new: true }
+				)
+					.populate('comments')
+					.exec(),
 			]);
-			res.redirect(`/posts/${req.params.postid}`);
+			res.json(newPost);
 		}
 	}),
 ];

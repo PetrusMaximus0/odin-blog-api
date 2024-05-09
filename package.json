@@ -6,7 +6,8 @@
 		"start": "node ./bin/www",
 		"devstart": "nodemon --env-file=.env ./bin/www",
 		"serverstart": "npm run devstart && DEBUG=odin-blog-api:*",
-		"createAdmin": "node --env-file=.env createUser.js"
+		"createAdmin": "node --env-file=.env createUser.js",
+		"populateDatabase": "node --env-file=.env ./dev/populateDatabase.js"
 	},
 	"dependencies": {
 		"bcryptjs": "^2.4.3",

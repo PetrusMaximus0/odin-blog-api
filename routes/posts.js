@@ -5,10 +5,13 @@ const postController = require('../controllers/postController');
 // Read list of all posts
 router.get('/', postController.blogposts_GET);
 
-//GET Get a list of all posts, including hidden posts.
+// Read a list of all categories and all posts
+router.get('/shortlist', postController.shortlist_GET);
+
+// GET Get a list of all posts, including hidden posts.
 router.get('/admin/all', postController.blogposts_admin_GET);
 
-//GET Create a post.
+// GET Create a post.
 router.get('/new', postController.new_blogpost_GET);
 
 // POST Create a post.
