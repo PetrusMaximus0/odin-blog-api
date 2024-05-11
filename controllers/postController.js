@@ -35,7 +35,7 @@ exports.blogposts_GET = [
 		const numberOfCards = 3;
 		const pageNumber = req.query.page ? parseInt(req.query.page) - 1 : 0;
 		const allPosts = await Post.find({ hidden: false })
-			.sort({ date: -1 })
+			.sort({ date: -1, title: -1 })
 			.skip(pageNumber * numberOfCards)
 			.limit(numberOfCards)
 			.populate('comments')
