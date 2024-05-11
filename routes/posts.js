@@ -21,7 +21,7 @@ router.post('/new', postController.new_blogpost_POST);
 router.get('/:postid', postController.read_blogpost_GET);
 
 // Post comment on blogpost
-router.post('/:postid/comment/new', postController.new_comment_POST);
+router.post('/:postid/comment/', postController.new_comment_POST);
 
 // DELETE Delete a post.
 router.delete('/:postid', postController.delete_blogpost_DELETE);

@@ -32,13 +32,19 @@ verifyToken = (req, res, next) => {
 
 exports.blogposts_GET = [
 	asyncHandler(async (req, res, next) => {
-		const numberOfCards = 3;
+		console.log(req.query);
 		const pageNumber = req.query.page ? parseInt(req.query.page) - 1 : 0;
-		const allPosts = await Post.find({ hidden: false })
+		const query = { hidden: false };
+		if (req.query.queryType) {
+			query[`${req.query.queryType}`] = req.query.query;
+		}
+		const allPosts = await Post.find(
+			query,
+			'date title description timeToRead headerImage comments'
+		)
 			.sort({ date: -1, title: -1 })
-			.skip(pageNumber * numberOfCards)
-			.limit(numberOfCards)
-			.populate('comments')
+			.skip(pageNumber * parseInt(req.query.items))
+			.limit(parseInt(req.query.items))
 			.exec();
 		res.json(allPosts);
 	}),
@@ -46,7 +52,7 @@ exports.blogposts_GET = [
 
 exports.shortlist_GET = asyncHandler(async (req, res, next) => {
 	const categories = await Category.find({}).sort({ name: 1 }).exec();
-	const posts = await Post.find({ hidden: false }).exec();
+	const posts = await Post.find({ hidden: false }, 'categories date').exec();
 	res.json({ posts, categories });
 });
 
@@ -119,10 +125,7 @@ exports.read_blogpost_GET = asyncHandler(async (req, res, next) => {
 	}
 
 	// Post found and not hidden, return the payload
-	res.json({
-		blogPost: blogPost,
-		Message: 'Here is the blog post you requested!',
-	});
+	res.json(blogPost);
 });
 
 exports.delete_blogpost_DELETE = [
