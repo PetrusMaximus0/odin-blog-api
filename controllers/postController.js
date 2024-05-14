@@ -32,27 +32,62 @@ verifyToken = (req, res, next) => {
 
 exports.blogposts_GET = [
 	asyncHandler(async (req, res, next) => {
-		console.log(req.query);
 		const pageNumber = req.query.page ? parseInt(req.query.page) - 1 : 0;
-		const query = { hidden: false };
-		if (req.query.queryType) {
-			query[`${req.query.queryType}`] = req.query.query;
+		const numberOfItems = req.query.items ? parseInt(req.query.items) : 3;
+
+		if (req.query.queryType === 'search') {
+			const allPosts = await Post.aggregate()
+				.search({
+					index: 'postSearch',
+					text: {
+						query: req.query.query,
+						path: {
+							wildcard: '*',
+						},
+					},
+				})
+				.match({ hidden: false })
+				.exec();
+
+			//
+			const lastPage = (pageNumber + 1) * numberOfItems >= allPosts.length;
+			const posts = allPosts.slice(
+				pageNumber * numberOfItems,
+				numberOfItems + pageNumber * numberOfItems
+			);
+			//
+			res.json({ allPosts: posts, lastPage });
+		} else {
+			const query = { hidden: false };
+			if (req.query.queryType) {
+				query[`${req.query.queryType}`] = req.query.query;
+			}
+			const [totalItems, allPosts] = await Promise.all([
+				Post.countDocuments(query),
+				Post.find(
+					query,
+					'date title description timeToRead headerImage comments'
+				)
+					.sort({ date: -1, title: -1 })
+					.skip(pageNumber * numberOfItems)
+					.limit(numberOfItems)
+					.exec(),
+			]);
+			const lastPage = (pageNumber + 1) * numberOfItems >= totalItems;
+			res.json({ allPosts, lastPage });
 		}
-		const allPosts = await Post.find(
-			query,
-			'date title description timeToRead headerImage comments'
-		)
-			.sort({ date: -1, title: -1 })
-			.skip(pageNumber * parseInt(req.query.items))
-			.limit(parseInt(req.query.items))
-			.exec();
-		res.json(allPosts);
 	}),
 ];
 
 exports.shortlist_GET = asyncHandler(async (req, res, next) => {
-	const categories = await Category.find({}).sort({ name: 1 }).exec();
-	const posts = await Post.find({ hidden: false }, 'categories date').exec();
+	const [categories, posts] = await Promise.all([
+		Category.find({})
+			.sort({ name: 1 })
+			.populate({ path: 'posts', match: { hidden: false }, select: '_id' })
+			.exec(),
+		Post.find({ hidden: false }, 'date').exec(),
+	]);
+
 	res.json({ posts, categories });
 });
 
@@ -176,7 +211,6 @@ exports.new_comment_POST = [
 				text: req.body.text,
 				date: new Date(),
 			});
-			console.log(newComment);
 			const [newCommentResp, newPost] = await Promise.all([
 				newComment.save(),
 				Post.findByIdAndUpdate(
