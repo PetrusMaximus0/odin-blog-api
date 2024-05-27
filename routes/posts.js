@@ -8,6 +8,9 @@ router.get('/', postController.blogposts_GET);
 // Read a list of all categories and all posts
 router.get('/shortlist', postController.shortlist_GET);
 
+// Read a list of all categories and all posts
+router.get('/admin/shortlist', postController.shortlist_GET);
+
 // GET Get a list of all posts, including hidden posts.
 router.get('/admin/all', postController.blogposts_admin_GET);
 

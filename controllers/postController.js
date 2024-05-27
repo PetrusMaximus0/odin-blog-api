@@ -6,13 +6,14 @@ const { body, validationResult } = require('express-validator');
 const Category = require('../models/category');
 
 // Verify if the local token is valid.
-verifyToken = (req, res, next) => {
+const verifyToken = (req, res, next) => {
 	const bearerHeader = req.headers['authorization'];
 	if (typeof bearerHeader !== 'undefined') {
 		const bearerToken = bearerHeader.split(' ')[1];
 		req.token = bearerToken;
 	} else {
-		res.status(403).send('Token verification failed.');
+		res.status(404).send('Token verification failed.');
+		return;
 	}
 	// Verify the local token
 	jwt.verify(
@@ -21,7 +22,8 @@ verifyToken = (req, res, next) => {
 		{ expiresIn: '120s' },
 		(err, authData) => {
 			if (err) {
-				res.status(403).send(err);
+				res.status(401).send(err);
+				return;
 			} else {
 				req.authData = authData;
 				next();
@@ -91,11 +93,70 @@ exports.shortlist_GET = asyncHandler(async (req, res, next) => {
 	res.json({ posts, categories });
 });
 
+exports.adminShortlist_GET = [
+	verifyToken,
+	asyncHandler(async (req, res, next) => {
+		const [categories, posts] = await Promise.all([
+			Category.find({})
+				.sort({ name: 1 })
+				.populate({ path: 'posts', match: { hidden: true }, select: '_id' })
+				.exec(),
+			Post.find({ hidden: false }, 'date').exec(),
+		]);
+
+		res.json({ posts, categories });
+	}),
+];
+
 exports.blogposts_admin_GET = [
 	verifyToken,
 	asyncHandler(async (req, res, next) => {
-		const allPosts = await Post.find({}).sort({ date: -1 }).exec();
-		res.json(allPosts);
+		const pageNumber = req.query.page ? parseInt(req.query.page) - 1 : 0;
+		const numberOfItems = req.query.items ? parseInt(req.query.items) : 3;
+
+		if (req.query.queryType === 'search') {
+			const allPosts = await Post.aggregate()
+				.search({
+					index: 'postSearch',
+					text: {
+						query: req.query.query,
+						path: {
+							wildcard: '*',
+						},
+					},
+				})
+				.exec();
+
+			//
+			const lastPage = (pageNumber + 1) * numberOfItems >= allPosts.length;
+			const posts = allPosts.slice(
+				pageNumber * numberOfItems,
+				numberOfItems + pageNumber * numberOfItems
+			);
+			//
+			res.json({ allPosts: posts, lastPage });
+		} else {
+			const query = {};
+			if (req.query.queryType) {
+				query[`${req.query.queryType}`] = req.query.query;
+			}
+			const [totalItems, allPosts, categories] = await Promise.all([
+				Post.countDocuments(query),
+				Post.find(
+					query,
+					'date title description timeToRead headerImage comments hidden'
+				)
+					.sort({ date: -1, title: -1 })
+					.skip(pageNumber * numberOfItems)
+					.limit(numberOfItems)
+					.exec(),
+				Category.find({}).exec(),
+			]);
+
+			const lastPage = (pageNumber + 1) * numberOfItems >= totalItems;
+			console.log({ allPosts, lastPage, categories });
+			res.json({ allPosts, lastPage, categories });
+		}
 	}),
 ];
 
@@ -108,41 +169,84 @@ exports.new_blogpost_GET = [
 
 exports.new_blogpost_POST = [
 	verifyToken,
-	body('title').trim().isLength({ min: 1, max: 100 }).escape(),
-	body('text').trim().isLength({ min: 1, max: 1000 }).escape(),
-	body('author').trim().isLength({ min: 1, max: 100 }).escape(),
-	body('timeToRead').trim().isLength({ min: 1, max: 3 }).escape(),
+	body('author')
+		.trim()
+		.isLength({ min: 1, max: 100 })
+		.withMessage("The author's name must not exceed 100 characters")
+		.escape(),
+	body('title')
+		.trim()
+		.isLength({ min: 1, max: 100 })
+		.withMessage('The title must not exceed 100 characters')
+		.escape(),
+	body('text')
+		.trim()
+		.isLength({ min: 1, max: 1000 })
+		.withMessage('The blogpost text must not exceed 1000 characters')
+		.escape(),
+	body('description')
+		.trim()
+		.isLength({ min: 1, max: 200 })
+		.withMessage('The post description must not exceed 200 characters')
+		.escape(),
+	body('timeToRead')
+		.trim()
+		.isLength({ min: 1, max: 3 })
+		.withMessage(
+			'The time to read must be between 1 and 3 digits, in minutes'
+		)
+		.escape(),
+	body('categories').isArray({ min: 1 }),
+	body('categories.*')
+		.trim()
+		.isLength({ min: 1, max: 100 })
+		.withMessage('Atleast one category must be chosen for a blogpost')
+		.escape(),
 	body('hidden').isBoolean(),
+	body('headerImage')
+		.trim()
+		.isLength({ min: 1 })
+		.withMessage('A link for a header image must be provided')
+		.escape(),
+
 	asyncHandler(async (req, res, next) => {
 		// Validate and sanitize fields
 		// Extract validation errors
 		const errors = validationResult(req);
+		console.log(req.body.categories);
 		if (!errors.isEmpty()) {
 			// If errors then rerender blogpost form.
-			res.json({
+			res.status(400).json({
 				postData: {
 					author: req.body.author,
 					title: req.body.title,
 					text: req.body.text,
+					description: req.body.description,
 					timeToRead: req.body.timeToRead,
+					categories: req.body.categories,
 					hidden: req.body.hidden,
+					headerImage: req.body.headerImage,
 				},
 				errors: errors.array(),
 			});
+			return;
 		}
 		// No errors then store the blog post in database and redirect to the blogpost list.
 		const newBlogPost = Post({
 			author: req.body.author,
 			title: req.body.title,
 			text: req.body.text,
+			description: req.body.description,
 			date: new Date(),
 			timeToRead: req.body.timeToRead,
 			comments: [],
+			categories: req.body.categories,
 			hidden: req.body.hidden,
+			headerImage: req.body.headerImage,
 		});
 
 		await newBlogPost.save();
-		res.json({ authData: req.authData, post: newBlogPost });
+		res.status(201).json({ authData: req.authData, post: newBlogPost });
 	}),
 ];
 
