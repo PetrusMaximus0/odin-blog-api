@@ -4,6 +4,7 @@ const logger = require('morgan');
 const indexRouter = require('./routes/index');
 const usersRouter = require('./routes/users');
 const postsRouter = require('./routes/posts');
+const categoryRouter = require('./routes/categories');
 //
 
 //
@@ -31,5 +32,6 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/', indexRouter);
 app.use('/users', usersRouter);
 app.use('/posts', postsRouter);
+app.use('/categories', categoryRouter);
 
 module.exports = app;
