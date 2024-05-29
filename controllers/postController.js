@@ -1,36 +1,9 @@
-const jwt = require('jsonwebtoken');
 const Post = require('../models/post');
 const Comment = require('../models/comment');
 const asyncHandler = require('express-async-handler');
 const { body, validationResult } = require('express-validator');
 const Category = require('../models/category');
-
-// Verify if the local token is valid.
-const verifyToken = (req, res, next) => {
-	const bearerHeader = req.headers['authorization'];
-	if (typeof bearerHeader !== 'undefined') {
-		const bearerToken = bearerHeader.split(' ')[1];
-		req.token = bearerToken;
-	} else {
-		res.status(404).send('Token verification failed.');
-		return;
-	}
-	// Verify the local token
-	jwt.verify(
-		req.token,
-		process.env.SECRET,
-		{ expiresIn: '120s' },
-		(err, authData) => {
-			if (err) {
-				res.status(401).send(err);
-				return;
-			} else {
-				req.authData = authData;
-				next();
-			}
-		}
-	);
-};
+const verifyToken = require('./verifyToken');
 
 exports.blogposts_GET = [
 	asyncHandler(async (req, res, next) => {
@@ -167,8 +140,7 @@ exports.new_blogpost_GET = [
 	},
 ];
 
-exports.new_blogpost_POST = [
-	verifyToken,
+const validatePostForm = [
 	body('author')
 		.trim()
 		.isLength({ min: 1, max: 100 })
@@ -181,7 +153,7 @@ exports.new_blogpost_POST = [
 		.escape(),
 	body('text')
 		.trim()
-		.isLength({ min: 1, max: 1000 })
+		.isLength({ min: 1, max: 10000 })
 		.withMessage('The blogpost text must not exceed 1000 characters')
 		.escape(),
 	body('description')
@@ -208,12 +180,15 @@ exports.new_blogpost_POST = [
 		.isLength({ min: 1 })
 		.withMessage('A link for a header image must be provided')
 		.escape(),
+];
 
+exports.new_blogpost_POST = [
+	verifyToken,
+	validatePostForm,
 	asyncHandler(async (req, res, next) => {
 		// Validate and sanitize fields
 		// Extract validation errors
 		const errors = validationResult(req);
-		console.log(req.body.categories);
 		if (!errors.isEmpty()) {
 			// If errors then rerender blogpost form.
 			res.status(400).json({
@@ -336,30 +311,35 @@ exports.edit_blogpost_GET = [
 	verifyToken,
 	asyncHandler(async (req, res, next) => {
 		const blogpost = await Post.findById(req.params.postid).exec();
+		const categories = await Category.find({}).exec();
 		res.json({
-			Response: 'Load the blogpost to edit',
-			ID: req.params.postid,
-			Blogpost: blogpost,
+			categories: categories,
+			blogpost: blogpost,
 		});
 	}),
 ];
 
 exports.edit_blogpost_PUT = [
 	verifyToken,
-	body('title').trim().isLength({ min: 1, max: 100 }).escape(),
-	body('text').trim().isLength({ min: 1, max: 1000 }).escape(),
+	validatePostForm,
 	asyncHandler(async (req, res, next) => {
 		const errors = validationResult(req);
 		if (!errors.isEmpty()) {
 			res.json({ Message: 'There are errors', errors: errors });
 		}
-		const blogpost = await Post.findByIdAndUpdate(req.params.postid, {
+		const post = await Post.findByIdAndUpdate(req.params.postid, {
+			author: req.body.author,
 			title: req.body.title,
 			text: req.body.text,
+			description: req.body.description,
+			date: new Date(),
+			timeToRead: req.body.timeToRead,
+			categories: req.body.categories,
+			hidden: req.body.hidden,
+			headerImage: req.body.headerImage,
 		}).exec();
 		res.json({
-			Response: 'Edit blogpost',
-			blogpost: blogpost,
+			post: post,
 		});
 	}),
 ];
