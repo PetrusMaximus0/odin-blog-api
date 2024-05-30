@@ -7,9 +7,12 @@ const categoryController = require('../controllers/categoryController');
 router.post('/', categoryController.new_category_POST);
 
 // PUT Edit a category name
-router.put('/:_id', categoryController.edit_category_PUT);
+router.put('/:id', categoryController.edit_category_PUT);
 
 // GET all categories
 router.get('/', categoryController.read_category_GET);
+
+// DELETE a category by ID
+router.delete('/:id', categoryController.delete_category_DELETE);
 
 module.exports = router;

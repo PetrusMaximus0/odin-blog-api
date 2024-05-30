@@ -2,6 +2,7 @@ const { body, validationResult } = require('express-validator');
 const asyncHandler = require('express-async-handler');
 const Category = require('../models/category');
 const verifyToken = require('./verifyToken');
+const Post = require('../models/post');
 
 const categoryValidationChain = [
 	body('name').trim().isLength({ min: 1, max: 100 }).escape(),
@@ -35,10 +36,10 @@ exports.new_category_POST = [
 
 exports.edit_category_PUT = [
 	verifyToken,
+	categoryValidationChain,
 	validateCategory,
 	asyncHandler(async (req, res, next) => {
-		console.log(req.body);
-		const updateCategory = await Category.findByIdAndUpdate(req.params._id, {
+		const updateCategory = await Category.findByIdAndUpdate(req.params.id, {
 			name: req.body.name,
 		});
 		if (updateCategory === null) {
@@ -52,3 +53,23 @@ exports.read_category_GET = asyncHandler(async (req, res, next) => {
 	const categories = await Category.find({}).exec();
 	res.json({ categories });
 });
+
+exports.delete_category_DELETE = [
+	verifyToken,
+	asyncHandler(async (req, res, next) => {
+		//
+		const [deletedCategory, updatedPosts] = await Promise.all([
+			Category.findByIdAndDelete(req.params.id).exec(),
+			Post.updateMany({}, { $pull: { categories: req.params.id } }),
+		]);
+
+		//
+		if (deletedCategory === null) {
+			console.log('Category was null!');
+		}
+
+		console.log(updatedPosts);
+
+		res.status(204).json({ deletedCategory, updatedPosts });
+	}),
+];
