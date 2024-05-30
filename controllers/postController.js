@@ -127,7 +127,6 @@ exports.blogposts_admin_GET = [
 			]);
 
 			const lastPage = (pageNumber + 1) * numberOfItems >= totalItems;
-			console.log({ allPosts, lastPage, categories });
 			res.json({ allPosts, lastPage, categories });
 		}
 	}),
@@ -221,6 +220,11 @@ exports.new_blogpost_POST = [
 		});
 
 		await newBlogPost.save();
+		await Category.updateMany(
+			{ _id: { $in: req.body.categories } },
+			{ $addToSet: { posts: newBlogPost._id } }
+		);
+
 		res.status(201).json({ authData: req.authData, post: newBlogPost });
 	}),
 ];
@@ -245,18 +249,27 @@ exports.read_blogpost_GET = asyncHandler(async (req, res, next) => {
 exports.delete_blogpost_DELETE = [
 	verifyToken,
 	asyncHandler(async (req, res, next) => {
-		// This can be simplified by storing a reference in the comment to the parent blogpost.
-		// In that case we trade storage with one less request.
+		//Delete the comments
 		const blogpost = await Post.findById(req.params.postid).exec();
 		const allCommentsDeleted = await Comment.deleteMany({
 			_id: { $in: blogpost.comments },
 		}).exec();
+
+		// Delete the blogpost
 		const deletedBlogPost = await Post.findByIdAndDelete(
 			req.params.postid
 		).exec();
+
+		// Remove the post IDs from the categories
+		const updatedCategories = await Category.updateMany(
+			{},
+			{ $pull: { posts: req.params.postid } }
+		);
+
 		res.json({
 			deletedBlogPost: deletedBlogPost,
 			deleteCount: allCommentsDeleted,
+			updatedCategories: updatedCategories,
 		});
 	}),
 ];
@@ -324,20 +337,34 @@ exports.edit_blogpost_PUT = [
 	validatePostForm,
 	asyncHandler(async (req, res, next) => {
 		const errors = validationResult(req);
+
 		if (!errors.isEmpty()) {
 			res.json({ Message: 'There are errors', errors: errors });
 		}
+
+		// Update the post with the new data.
 		const post = await Post.findByIdAndUpdate(req.params.postid, {
 			author: req.body.author,
 			title: req.body.title,
 			text: req.body.text,
 			description: req.body.description,
-			date: new Date(),
 			timeToRead: req.body.timeToRead,
 			categories: req.body.categories,
 			hidden: req.body.hidden,
 			headerImage: req.body.headerImage,
 		}).exec();
+
+		console.log(post);
+
+		// Remove the post references from all categories.
+		await Category.updateMany({}, { $pull: { posts: post._id } });
+
+		// Re add the post Id to the correct categories.
+		await Category.updateMany(
+			{ _id: { $in: req.body.categories } },
+			{ $addToSet: { posts: post._id } }
+		);
+
 		res.json({
 			post: post,
 		});
@@ -350,20 +377,52 @@ exports.delete_comment_DELETE = [
 		const commentDeleted = await Comment.findByIdAndDelete(
 			req.params.commentid
 		).exec();
+
 		const blogPost = await Post.updateOne(
 			{ comments: req.params.commentid },
 			{ $pull: { comments: req.params.commentid } }
 		).exec();
+
 		if (commentDeleted === null && blogPost === null) {
 			res.status(404).json({
 				Response: 'Couldnt find the comment to delete.',
 			});
 		}
-		res.json({
+
+		res.status(201).json({
 			Response: 'Delete comment',
 			Id: req.params.commentid,
 			commentDeleted: commentDeleted,
 			blogpost: blogPost,
 		});
+	}),
+];
+
+exports.publish_blogpost_PUT = [
+	verifyToken,
+	asyncHandler(async (req, res, next) => {
+		const result = await Post.findByIdAndUpdate(req.params.postid, {
+			hidden: false,
+		});
+
+		if (!result) {
+			res.sendStatus(404);
+			return;
+		}
+		res.status(201).json(result);
+	}),
+];
+
+exports.hide_blogpost_PUT = [
+	verifyToken,
+	asyncHandler(async (req, res, next) => {
+		const result = await Post.findByIdAndUpdate(req.params.postid, {
+			hidden: true,
+		});
+		if (!result) {
+			res.sendStatus(404);
+			return;
+		}
+		res.status(201).json(result);
 	}),
 ];

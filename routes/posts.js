@@ -41,4 +41,10 @@ router.delete(
 	postController.delete_comment_DELETE
 );
 
+// Publish an unpublished Post
+router.put('/:postid/publish', postController.publish_blogpost_PUT);
+
+// Publish an unpublished Post
+router.put('/:postid/hide', postController.hide_blogpost_PUT);
+
 module.exports = router;
