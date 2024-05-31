@@ -5,51 +5,147 @@ const { body, validationResult } = require('express-validator');
 const Category = require('../models/category');
 const verifyToken = require('./verifyToken');
 
+const searchQuery = async (
+	query,
+	pageNumber,
+	numberOfItems,
+	showHidden = false
+) => {
+	const allPosts = await Post.aggregate()
+		.search({
+			index: 'postSearch',
+			text: {
+				query: query,
+				path: {
+					wildcard: '*',
+				},
+			},
+		})
+		.match(showHidden ? {} : { hidden: false })
+		.exec();
+
+	//
+	const lastPage = (pageNumber + 1) * numberOfItems >= allPosts.length;
+	const posts = allPosts.slice(
+		pageNumber * numberOfItems,
+		numberOfItems + pageNumber * numberOfItems
+	);
+	//
+
+	return { allPosts: posts, lastPage: lastPage };
+};
+
+const dateQuery = async (
+	date,
+	pageNumber,
+	numberOfItems,
+	showHidden = false
+) => {
+	const query = {
+		date: {
+			$gte: date,
+			$lt: `${parseInt(date) + 1}`,
+		},
+	};
+
+	// Don't show hidden posts
+	if (!showHidden) {
+		query.hidden = false;
+	}
+
+	const [totalItems, allPosts] = await Promise.all([
+		Post.countDocuments(query),
+		Post.find(
+			query,
+			'date title description timeToRead headerImage comments hidden'
+		)
+			.sort({ date: -1, title: -1 })
+			.skip(pageNumber * numberOfItems)
+			.limit(numberOfItems)
+			.exec(),
+	]);
+	const lastPage = (pageNumber + 1) * numberOfItems >= totalItems;
+	return { allPosts, lastPage };
+};
+
+const arbitraryQuery = async (
+	queryType,
+	query,
+	pageNumber,
+	numberOfItems,
+	showHidden = false
+) => {
+	const postQuery = { [queryType]: query };
+
+	// Don't show hidden posts
+	if (!showHidden) {
+		postQuery.hidden = false;
+	}
+
+	//
+	const [totalItems, allPosts] = await Promise.all([
+		Post.countDocuments(postQuery),
+		Post.find(
+			postQuery,
+			'date title description timeToRead headerImage comments hidden'
+		)
+			.sort({ date: -1, title: -1 })
+			.skip(pageNumber * numberOfItems)
+			.limit(numberOfItems)
+			.exec(),
+	]);
+	const lastPage = (pageNumber + 1) * numberOfItems >= totalItems;
+	return { allPosts, lastPage };
+};
+
 exports.blogposts_GET = [
 	asyncHandler(async (req, res, next) => {
 		const pageNumber = req.query.page ? parseInt(req.query.page) - 1 : 0;
 		const numberOfItems = req.query.items ? parseInt(req.query.items) : 3;
 
 		if (req.query.queryType === 'search') {
-			const allPosts = await Post.aggregate()
-				.search({
-					index: 'postSearch',
-					text: {
-						query: req.query.query,
-						path: {
-							wildcard: '*',
-						},
-					},
-				})
-				.match({ hidden: false })
-				.exec();
-
-			//
-			const lastPage = (pageNumber + 1) * numberOfItems >= allPosts.length;
-			const posts = allPosts.slice(
-				pageNumber * numberOfItems,
-				numberOfItems + pageNumber * numberOfItems
+			res.json(
+				await searchQuery(req.query.query, pageNumber, numberOfItems)
 			);
-			//
-			res.json({ allPosts: posts, lastPage });
+		} else if (req.query.queryType === 'date') {
+			res.json(await dateQuery(req.query.query, pageNumber, numberOfItems));
 		} else {
-			const query = { hidden: false };
-			if (req.query.queryType) {
-				query[`${req.query.queryType}`] = req.query.query;
-			}
-			const [totalItems, allPosts] = await Promise.all([
-				Post.countDocuments(query),
-				Post.find(
-					query,
-					'date title description timeToRead headerImage comments'
+			res.json(
+				await arbitraryQuery(
+					req.query.queryType,
+					req.query.query,
+					pageNumber,
+					numberOfItems
 				)
-					.sort({ date: -1, title: -1 })
-					.skip(pageNumber * numberOfItems)
-					.limit(numberOfItems)
-					.exec(),
-			]);
-			const lastPage = (pageNumber + 1) * numberOfItems >= totalItems;
-			res.json({ allPosts, lastPage });
+			);
+		}
+	}),
+];
+
+exports.blogposts_admin_GET = [
+	verifyToken,
+	asyncHandler(async (req, res, next) => {
+		const pageNumber = req.query.page ? parseInt(req.query.page) - 1 : 0;
+		const numberOfItems = req.query.items ? parseInt(req.query.items) : 3;
+
+		if (req.query.queryType === 'search') {
+			res.json(
+				await searchQuery(req.query.query, pageNumber, numberOfItems, true)
+			);
+		} else if (req.query.queryType === 'date') {
+			res.json(
+				await dateQuery(req.query.query, pageNumber, numberOfItems, true)
+			);
+		} else {
+			res.json(
+				await arbitraryQuery(
+					req.query.queryType,
+					req.query.query,
+					pageNumber,
+					numberOfItems,
+					true
+				)
+			);
 		}
 	}),
 ];
@@ -72,71 +168,13 @@ exports.adminShortlist_GET = [
 		const [categories, posts] = await Promise.all([
 			Category.find({})
 				.sort({ name: 1 })
-				.populate({ path: 'posts', match: { hidden: true }, select: '_id' })
+				.populate({ path: 'posts', select: '_id' })
 				.exec(),
-			Post.find({ hidden: false }, 'date').exec(),
+			Post.find({}, 'date').exec(),
 		]);
 
 		res.json({ posts, categories });
 	}),
-];
-
-exports.blogposts_admin_GET = [
-	verifyToken,
-	asyncHandler(async (req, res, next) => {
-		const pageNumber = req.query.page ? parseInt(req.query.page) - 1 : 0;
-		const numberOfItems = req.query.items ? parseInt(req.query.items) : 3;
-
-		if (req.query.queryType === 'search') {
-			const allPosts = await Post.aggregate()
-				.search({
-					index: 'postSearch',
-					text: {
-						query: req.query.query,
-						path: {
-							wildcard: '*',
-						},
-					},
-				})
-				.exec();
-
-			//
-			const lastPage = (pageNumber + 1) * numberOfItems >= allPosts.length;
-			const posts = allPosts.slice(
-				pageNumber * numberOfItems,
-				numberOfItems + pageNumber * numberOfItems
-			);
-			//
-			res.json({ allPosts: posts, lastPage });
-		} else {
-			const query = {};
-			if (req.query.queryType) {
-				query[`${req.query.queryType}`] = req.query.query;
-			}
-			const [totalItems, allPosts, categories] = await Promise.all([
-				Post.countDocuments(query),
-				Post.find(
-					query,
-					'date title description timeToRead headerImage comments hidden'
-				)
-					.sort({ date: -1, title: -1 })
-					.skip(pageNumber * numberOfItems)
-					.limit(numberOfItems)
-					.exec(),
-				Category.find({}).exec(),
-			]);
-
-			const lastPage = (pageNumber + 1) * numberOfItems >= totalItems;
-			res.json({ allPosts, lastPage, categories });
-		}
-	}),
-];
-
-exports.new_blogpost_GET = [
-	verifyToken,
-	(req, res, next) => {
-		res.json({ authData: req.authData, message: 'Get new blogpost form.' });
-	},
 ];
 
 const validatePostForm = [
@@ -192,14 +230,18 @@ exports.new_blogpost_POST = [
 			// If errors then rerender blogpost form.
 			res.status(400).json({
 				postData: {
-					author: req.body.author,
-					title: req.body.title,
-					text: req.body.text,
-					description: req.body.description,
+					author: req.body.author.replace(/&#x27;/g, "'"),
+					title: req.body.title.replace(/&#x27;/g, "'"),
+					text: req.body.text.replace(/&#x27;/g, "'"),
+					description: req.body.description.replace(/&#x27;/g, "'"),
 					timeToRead: req.body.timeToRead,
-					categories: req.body.categories,
+					categories: req.body.categories.forEach((cat) =>
+						cat.replace(/&#x27;/g, "'")
+					),
 					hidden: req.body.hidden,
-					headerImage: req.body.headerImage,
+					headerImage: req.body.headerImage
+						.replace(/&#x2F;/g, '/')
+						.replace(/&amp;/g, '&'),
 				},
 				errors: errors.array(),
 			});
@@ -207,16 +249,20 @@ exports.new_blogpost_POST = [
 		}
 		// No errors then store the blog post in database and redirect to the blogpost list.
 		const newBlogPost = Post({
-			author: req.body.author,
-			title: req.body.title,
-			text: req.body.text,
-			description: req.body.description,
+			author: req.body.author.replace(/&#x27;/g, "'"),
+			title: req.body.title.replace(/&#x27;/g, "'"),
+			text: req.body.text.replace(/&#x27;/g, "'"),
+			description: req.body.description.replace(/&#x27;/g, "'"),
 			date: new Date(),
 			timeToRead: req.body.timeToRead,
 			comments: [],
-			categories: req.body.categories,
+			categories: req.body.categories.forEach((cat) =>
+				cat.replace(/&#x27;/g, "'")
+			),
 			hidden: req.body.hidden,
-			headerImage: req.body.headerImage,
+			headerImage: req.body.headerImage
+				.replace(/&#x2F;/g, '/')
+				.replace(/&amp;/g, '&'),
 		});
 
 		await newBlogPost.save();
@@ -229,21 +275,42 @@ exports.new_blogpost_POST = [
 	}),
 ];
 
+const getBlogpost = async (id, showHidden = false) => {
+	const blogPost = await Post.findById(id).populate('comments').exec();
+	if (showHidden === true || blogPost.hidden === false) {
+		return blogPost;
+	} else {
+		return null;
+	}
+};
+
+exports.read_blogpost_admin_GET = [
+	verifyToken,
+	asyncHandler(async (req, res, next) => {
+		//
+		const blogPost = await getBlogpost(req.params.postid, true);
+		//
+		if (blogPost === null) {
+			// Couldn't find the post or it is marked as hidden.
+			res.sendStatus(404);
+		} else {
+			// Post found and not hidden, return the payload
+			res.json(blogPost);
+		}
+	}),
+];
+
 exports.read_blogpost_GET = asyncHandler(async (req, res, next) => {
 	//
-	const blogPost = await Post.findById(req.params.postid)
-		.populate('comments')
-		.exec();
-
+	const blogPost = await getBlogpost(req.params.postid);
 	//
-	if (blogPost === null || blogPost.hidden === true) {
+	if (blogPost === null) {
 		// Couldn't find the post or it is marked as hidden.
 		res.sendStatus(404);
-		return;
+	} else {
+		// Post found and not hidden, return the payload
+		res.json(blogPost);
 	}
-
-	// Post found and not hidden, return the payload
-	res.json(blogPost);
 });
 
 exports.delete_blogpost_DELETE = [
@@ -294,13 +361,12 @@ exports.new_comment_POST = [
 		if (!errors.isEmpty()) {
 			// There are errors
 			// Send back the form with sanitized values and errors.
-			console.log('Errors in form validation', errors);
 			res.json({ errors: errors.array(), formData: req.body });
 		} else {
 			// The form data is valid
 			const newComment = Comment({
 				author: req.body.author !== '' ? req.body.author : 'Anonymous User',
-				text: req.body.text,
+				text: req.body.text.replace(/&#x27;/g, "'"),
 				date: new Date(),
 			});
 			const [newCommentResp, newPost] = await Promise.all([
@@ -344,17 +410,19 @@ exports.edit_blogpost_PUT = [
 
 		// Update the post with the new data.
 		const post = await Post.findByIdAndUpdate(req.params.postid, {
-			author: req.body.author,
-			title: req.body.title,
-			text: req.body.text,
-			description: req.body.description,
+			author: req.body.author.replace(/&#x27;/g, "'"),
+			title: req.body.title.replace(/&#x27;/g, "'"),
+			text: req.body.text.replace(/&#x27;/g, "'"),
+			description: req.body.description.replace(/&#x27;/g, "'"),
 			timeToRead: req.body.timeToRead,
-			categories: req.body.categories,
+			categories: req.body.categories.forEach((cat) =>
+				cat.replace(/&#x27;/g, "'")
+			),
 			hidden: req.body.hidden,
-			headerImage: req.body.headerImage,
+			headerImage: req.body.headerImage
+				.replace(/&#x2F;/g, '/')
+				.replace(/&amp;/g, '&'),
 		}).exec();
-
-		console.log(post);
 
 		// Remove the post references from all categories.
 		await Category.updateMany({}, { $pull: { posts: post._id } });
