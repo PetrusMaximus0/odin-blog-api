@@ -4,14 +4,6 @@ const jwt = require('jsonwebtoken');
 const asyncHandler = require('express-async-handler');
 const { body, validationResult } = require('express-validator');
 
-exports.login_index = function (req, res, next) {
-	res.redirect('/users/login');
-};
-
-exports.login_GET = function (req, res, next) {
-	res.send(`Render the login form for the user`);
-};
-
 exports.login_POST = asyncHandler(async function (req, res, next) {
 	// The form should bring in a username and a password.
 	const user = await User.findOne({ username: req.body.username }).exec();
@@ -27,7 +19,7 @@ exports.login_POST = asyncHandler(async function (req, res, next) {
 	}
 	// User exists and password is correct. Obtain token and send to client.
 	jwt.sign(
-		{ user: user },
+		{ user: user.username },
 		process.env.SECRET,
 		{
 			expiresIn: '1h',
@@ -51,7 +43,7 @@ exports.validateToken_GET = asyncHandler(async function (req, res, next) {
 		const bearerToken = bearerHeader.split(' ')[1];
 		req.token = bearerToken;
 	} else {
-		res.status(403).send('Token verification failed.');
+		res.status(401).send('Token verification failed.');
 	}
 	// Verify the local token
 	jwt.verify(
@@ -60,7 +52,7 @@ exports.validateToken_GET = asyncHandler(async function (req, res, next) {
 		{ expiresIn: '120s' },
 		(err, authData) => {
 			if (err) {
-				res.status(403).send(err);
+				res.status(401).send(err);
 			} else {
 				req.authData = authData;
 				res.json(authData);
