@@ -1,5 +1,10 @@
 const express = require('express');
 const logger = require('morgan');
+
+// Security
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+
 //
 const indexRouter = require('./routes/index');
 const usersRouter = require('./routes/users');
@@ -27,6 +32,21 @@ const app = express();
 app.use(logger('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Security
+app.use(helmet());
+app.use(
+	rateLimit({
+		windowMs: 15 * 60 * 1000,
+		max: 50,
+	})
+);
+
+if (app.get('env') === 'production') {
+	app.use((err, req, res, next) => {
+		res.status(500).send('Server Error');
+	});
+}
 
 //
 app.use('/', indexRouter);
