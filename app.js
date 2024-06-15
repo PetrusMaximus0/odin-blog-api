@@ -1,5 +1,6 @@
 const express = require('express');
 const logger = require('morgan');
+const cors = require('cors');
 
 // Security
 const helmet = require('helmet');
@@ -41,6 +42,14 @@ app.use(
 		max: 50,
 	})
 );
+
+// CORS
+const corsOptions = {
+	origin: '*',
+	optionsSuccessStatus: 200,
+};
+
+app.use(cors(corsOptions));
 
 if (app.get('env') === 'production') {
 	app.use((err, req, res, next) => {
