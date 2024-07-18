@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const postSchema = new mongoose.Schema({
 	author: { type: String, maxLength: 100, minLenght: 1, required: true },
@@ -13,4 +13,4 @@ const postSchema = new mongoose.Schema({
 	headerImage: { type: String, required: true },
 });
 
-module.exports = mongoose.model('post', postSchema);
+export default mongoose.model('post', postSchema);
