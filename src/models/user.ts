@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const userSchema = new mongoose.Schema({
 	username: { type: String, required: true, minLenght: 1, maxLenght: 100 },
@@ -7,4 +7,4 @@ const userSchema = new mongoose.Schema({
 	posts: [{ type: mongoose.SchemaTypes.ObjectId, ref: 'post' }],
 });
 
-module.exports = mongoose.model('user', userSchema);
+export default mongoose.model('user', userSchema);

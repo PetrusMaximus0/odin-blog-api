@@ -1,10 +1,11 @@
-const User = require('../models/user');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const asyncHandler = require('express-async-handler');
-const { body, validationResult } = require('express-validator');
+import User from '../models/user';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import asyncHandler from 'express-async-handler';
+import { body, validationResult } from 'express-validator';
+import verifyToken from './verifyToken';
 
-exports.login_POST = asyncHandler(async function (req, res, next) {
+export const login_POST = asyncHandler(async function (req, res) {
 	// The form should bring in a username and a password.
 	const user = await User.findOne({ username: req.body.username }).exec();
 	if (!user) {
@@ -17,6 +18,13 @@ exports.login_POST = asyncHandler(async function (req, res, next) {
 		res.status(401).send({ error: 'Wrong password' });
 		return;
 	}
+
+	//
+	if (!process.env.SECRET) {
+		res.sendStatus(500);
+		return;
+	}
+
 	// User exists and password is correct. Obtain token and send to client.
 	jwt.sign(
 		{ user: user.username },
@@ -37,31 +45,14 @@ exports.login_POST = asyncHandler(async function (req, res, next) {
 	);
 });
 
-exports.validateToken_GET = asyncHandler(async function (req, res, next) {
-	const bearerHeader = req.headers['authorization'];
-	if (typeof bearerHeader !== 'undefined') {
-		const bearerToken = bearerHeader.split(' ')[1];
-		req.token = bearerToken;
-	} else {
-		res.status(401).send('Token verification failed.');
-	}
-	// Verify the local token
-	jwt.verify(
-		req.token,
-		process.env.SECRET,
-		{ expiresIn: '120s' },
-		(err, authData) => {
-			if (err) {
-				res.status(401).send(err);
-			} else {
-				req.authData = authData;
-				res.json(authData);
-			}
-		}
-	);
-});
+export const validateToken_GET = [
+	verifyToken,
+	asyncHandler((req, res) => {
+		res.json(req.body.authData);
+	}),
+];
 
-exports.newuser_POST = [
+export const newuser_POST = [
 	// Validate and Sanitize
 	body('username')
 		.trim()
@@ -72,7 +63,7 @@ exports.newuser_POST = [
 		.isLength({ min: 1, max: 100 })
 		.escape(),
 	body('password').trim().isLength({ min: 1, max: 100 }).escape(),
-	asyncHandler(async function (req, res, next) {
+	asyncHandler(async function (req, res) {
 		const errors = validationResult(req);
 		if (!errors.isEmpty()) {
 			// There are errors, render the form again with errors and sanitized values
@@ -93,6 +84,7 @@ exports.newuser_POST = [
 			});
 			return;
 		}
+
 		// Create a new user and save to the database.
 		const newUser = new User({
 			username: req.body.username,
@@ -105,6 +97,5 @@ exports.newuser_POST = [
 
 		// send success message
 		res.status(201).send({ message: 'success' });
-		return;
 	}),
 ];
