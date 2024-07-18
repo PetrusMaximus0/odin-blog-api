@@ -12,4 +12,4 @@ This is an API solution for The Odin Project's [Blog API](https://www.theodinpro
 ### Content Management
 
 - Repo: [https://github.com/PetrusMaximus0/odin-blog-poster](https://github.com/PetrusMaximus0/odin-blog-poster)
-- Website: [https://1682e295.odin-blog-poster.pages.dev](https://1682e295.odin-blog-poster.pages.dev)
+- Website: [https://odin-blog-poster.pages.dev](https://odin-blog-poster.pages.dev)
