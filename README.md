@@ -2,7 +2,7 @@
 
 This is an API solution for The Odin Project's [Blog API](https://www.theodinproject.com/lessons/node-path-nodejs-blog-api).
 
-_note: The forementioned project exercise has been recently updated on the TOP curriculum and no longer uses MongoDB and Mongoose. The new version of the project uses PostgreSQL and Prisma instead._
+_note: This solution is for an older version of the Blog API exercise._
 
 ## See the other solutions
 
