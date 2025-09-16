@@ -63,4 +63,8 @@ typings/
 # Build output for typescript
 dist
 
+# Development related folders
 dev
+
+# IDE files
+.idea

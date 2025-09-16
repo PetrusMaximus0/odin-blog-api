@@ -64,11 +64,11 @@ export const read_blogpost_GET = asyncHandler(async (req, res) => {
 	const blogPost = await Post.findOne({
 		_id: req.params.postid,
 		hidden: false,
-	});
+	}).populate("comments");
 
 	//
 	if (blogPost === null) {
-		// Couldn't find the post or it is marked as hidden.
+		// Couldn't find the post, or it is marked as hidden.
 		res.sendStatus(404);
 	} else {
 		// Post found and not hidden, return the payload
